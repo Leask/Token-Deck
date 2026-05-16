@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+
+<head lang="en">
+    <title>Token Deck Settings</title>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+</head>
+
+<body>
+    <sdpi-item label="Provider">
+        <sdpi-select setting="provider" default="codex">
+            <option value="codex">Codex</option>
+            <option value="claude">Claude</option>
+            <option value="gemini">Gemini</option>
+            <option value="cursor">Cursor</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="all">All enabled</option>
+        </sdpi-select>
+    </sdpi-item>
+
+    <sdpi-item label="Mode">
+        <sdpi-select setting="mode" default="auto">
+            <option value="auto">HTTP, then CLI</option>
+            <option value="http">HTTP only</option>
+            <option value="cli">CLI only</option>
+        </sdpi-select>
+    </sdpi-item>
+
+    <sdpi-item label="HTTP Port">
+        <sdpi-range setting="port" min="1" max="65535" step="1" default="8080" showlabels></sdpi-range>
+    </sdpi-item>
+
+    <sdpi-item label="Refresh">
+        <sdpi-range setting="refreshIntervalSeconds" min="15" max="900" step="15" default="60" showlabels></sdpi-range>
+    </sdpi-item>
+
+    <sdpi-item label="Endpoint">
+        <sdpi-textfield setting="endpoint" placeholder="http://127.0.0.1:8080/usage"></sdpi-textfield>
+    </sdpi-item>
+
+    <sdpi-item label="CLI Path">
+        <sdpi-textfield setting="codexbarPath" placeholder="codexbar"></sdpi-textfield>
+    </sdpi-item>
+</body>
+
+</html>

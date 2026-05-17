@@ -32,7 +32,6 @@ function renderTokenSVG(state: RenderState): string {
     const secondary = snapshot.secondary;
     const remaining = Math.round(primary?.remainingPercent ?? 0);
     const accent = colorForRemaining(remaining);
-    const reset = resetText(primary);
     const badges = [];
 
     if (state.status === 'refreshing') {
@@ -44,11 +43,8 @@ function renderTokenSVG(state: RenderState): string {
     return baseSVG([
         text(72, 24, snapshot.provider.toUpperCase(), 14, '#aab3c5', '700'),
         text(72, 60, `${remaining}%`, 34, accent, '800'),
-        text(72, 82, 'left', 12, '#d9deea', '700'),
-        progressBar(18, 98, 108, 9, primary, accent),
-        text(28, 119, windowLabel(primary), 10, '#aab3c5', '700'),
-        text(72, 119, reset, 10, '#d9deea', '700'),
-        progressBar(96, 116, 30, 5, secondary, '#5aa2ff'),
+        limitRow(18, 84, windowLabel(primary), primary, accent),
+        limitRow(18, 110, windowLabel(secondary), secondary, '#5aa2ff'),
         ...badges
     ]);
 }
@@ -102,6 +98,19 @@ function progressBar(
         ` rx="${height / 2}" fill="#2b3140"/>`,
         `<rect x="${x}" y="${y}" width="${filledWidth}" height="${height}"`,
         ` rx="${height / 2}" fill="${fill}"/>`
+    ].join('');
+}
+
+function limitRow(
+    x: number,
+    y: number,
+    label: string,
+    window: RateWindow | undefined,
+    fill: string
+): string {
+    return [
+        text(x + 11, y + 6, label, 10, '#aab3c5', '700'),
+        progressBar(x + 28, y, 88, 9, window, fill)
     ].join('');
 }
 
@@ -169,34 +178,6 @@ function windowLabel(window: RateWindow | undefined): string {
     }
 
     return `${minutes}m`;
-}
-
-function resetText(window: RateWindow | undefined): string {
-    if (window?.resetsAt === undefined) {
-        return 'no reset';
-    }
-
-    const resetDate = new Date(window.resetsAt);
-    const diffMs = resetDate.getTime() - Date.now();
-    if (!Number.isFinite(diffMs)) {
-        return 'no reset';
-    }
-
-    if (diffMs <= 0) {
-        return 'now';
-    }
-
-    const minutes = Math.round(diffMs / 60000);
-    if (minutes < 60) {
-        return `${minutes}m`;
-    }
-
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) {
-        return `${hours}h`;
-    }
-
-    return `${Math.round(hours / 24)}d`;
 }
 
 function compactError(message: string): string {

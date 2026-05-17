@@ -128,7 +128,7 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
                 status: 'ready',
                 snapshot
             }));
-            await action.setTitle(titleForSnapshot(snapshot));
+            await action.setTitle('');
             if (showLoading) {
                 await action.showOk();
             }
@@ -142,7 +142,7 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
                     message,
                     snapshot: previousSnapshot
                 }));
-                await action.setTitle(titleForSnapshot(previousSnapshot));
+                await action.setTitle('');
                 if (showLoading) {
                     await action.showAlert();
                 }
@@ -153,7 +153,7 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
                 status: 'error',
                 message
             }));
-            await action.setTitle('ERR');
+            await action.setTitle('');
             await action.showAlert();
         } finally {
             this.inFlight.delete(action.id);
@@ -169,7 +169,7 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
         const snapshot = this.snapshots.get(action.id);
         if (snapshot === undefined) {
             await action.setImage(renderTokenImage({ status: 'loading' }));
-            await action.setTitle('...');
+            await action.setTitle('');
             return;
         }
 
@@ -177,7 +177,7 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
             status: 'refreshing',
             snapshot
         }));
-        await action.setTitle(titleForSnapshot(snapshot));
+        await action.setTitle('');
     }
 
     private async refreshLatestSettings(

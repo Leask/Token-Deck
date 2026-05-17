@@ -70,3 +70,8 @@ token key:
 
 The hardware keys refresh automatically and also refresh immediately when
 pressed.
+
+`Disk Status` aggregates mounted local physical storage and skips network
+mounts, Time Machine local snapshots, and disk images. On macOS APFS volumes are
+deduplicated by container, so the internal Data volume and an external USB disk
+array are counted once each instead of counting every APFS system volume.

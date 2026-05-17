@@ -218,6 +218,13 @@ export class BatteryStatusAction extends HardwareStatusAction {
     }
 }
 
+@action({ UUID: 'com.leask.token-deck.power' })
+export class PowerStatusAction extends HardwareStatusAction {
+    constructor() {
+        super('power', 'PWR');
+    }
+}
+
 function positiveInteger(
     value: number | string | undefined,
     defaultValue: number

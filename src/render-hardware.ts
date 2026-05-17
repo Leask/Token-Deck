@@ -150,6 +150,10 @@ function colorForSnapshot(snapshot: HardwareSnapshot): string {
         return '#40d77b';
     }
 
+    if (snapshot.metric === 'power') {
+        return '#2dd4bf';
+    }
+
     return '#40d77b';
 }
 

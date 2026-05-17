@@ -123,6 +123,21 @@
 					"TitleAlignment": "middle"
 				}
 			]
+		},
+		{
+			"Name": "Power Status",
+			"UUID": "com.leask.token-deck.power",
+			"Icon": "imgs/actions/counter/icon",
+			"Tooltip": "Shows current system power draw when available.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/counter/key",
+					"TitleAlignment": "middle"
+				}
+			]
 		}
 	],
 	"Category": "Token Deck",

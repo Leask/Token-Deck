@@ -69,6 +69,7 @@ token key:
 - `Network Status`
 - `Temperature Status`
 - `Battery Status`
+- `Power Status`
 
 The hardware keys refresh automatically and also refresh immediately when
 pressed.
@@ -85,3 +86,7 @@ to macOS thermal pressure from `pmset -g therm` instead of showing an error.
 `Battery Status` uses `pmset -g batt` on macOS. It shows internal battery level
 on laptops, UPS charge on desktop Macs with a supported UPS, and AC/no battery
 when no battery source is present.
+
+`Power Status` reads Apple power telemetry from `ioreg` without requiring sudo.
+It reports current system input power when available, and falls back to
+voltage/current-derived power on systems that expose battery amperage.

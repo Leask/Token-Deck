@@ -17,7 +17,8 @@ export type HardwareMetric =
     | 'gpu'
     | 'network'
     | 'temperature'
-    | 'battery';
+    | 'battery'
+    | 'power';
 
 export type HardwareSnapshot = {
     metric: HardwareMetric;
@@ -68,6 +69,11 @@ type BatteryReading = {
     detail: string;
 };
 
+type PowerReading = {
+    watts: number;
+    detail: string;
+};
+
 const CPU_SAMPLE_MS = 250;
 const NETWORK_SAMPLE_MS = 750;
 const DISK_TIMEOUT_MS = 3_000;
@@ -75,6 +81,8 @@ const GPU_TIMEOUT_MS = 5_000;
 const NETSTAT_TIMEOUT_MS = 3_000;
 const TEMPERATURE_TIMEOUT_MS = 3_000;
 const BATTERY_TIMEOUT_MS = 3_000;
+const POWER_TIMEOUT_MS = 3_000;
+const POWER_MAX_WATTS = 250;
 const TEMPERATURE_MIN_C = 30;
 const TEMPERATURE_MAX_C = 100;
 const EXTERNAL_NODE_CANDIDATES = [
@@ -101,6 +109,8 @@ export async function fetchHardwareSnapshot(
             return fetchTemperatureSnapshot();
         case 'battery':
             return fetchBatterySnapshot();
+        case 'power':
+            return fetchPowerSnapshot();
     }
 }
 
@@ -384,6 +394,31 @@ async function fetchBatterySnapshot(): Promise<HardwareSnapshot> {
     }
 }
 
+async function fetchPowerSnapshot(): Promise<HardwareSnapshot> {
+    if (process.platform !== 'darwin') {
+        return unavailableSnapshot('power', 'PWR', 'not macOS');
+    }
+
+    try {
+        const { stdout } = await execFileAsync(
+            'ioreg',
+            ['-rn', 'AppleSmartBattery', '-w0'],
+            {
+                timeout: POWER_TIMEOUT_MS,
+                maxBuffer: 1024 * 128
+            }
+        );
+        const reading = parsePowerReading(stdout);
+        if (reading === undefined) {
+            return unavailableSnapshot('power', 'PWR', 'no meter');
+        }
+
+        return powerReadingSnapshot(reading);
+    } catch {
+        return unavailableSnapshot('power', 'PWR', 'no meter');
+    }
+}
+
 function parsePmsetBattery(stdout: string): BatteryReading {
     const source = stdout.match(/Now drawing from '([^']+)'/)?.[1] ?? 'Power';
     const batteryLines = stdout
@@ -448,6 +483,84 @@ function batteryReadingSnapshot(reading: BatteryReading): HardwareSnapshot {
         detail: reading.detail,
         percent,
         status: batteryStatus(percent, reading.state)
+    };
+}
+
+function parsePowerReading(stdout: string): PowerReading | undefined {
+    const telemetryReading = telemetryPowerReading(stdout);
+    if (telemetryReading !== undefined) {
+        return telemetryReading;
+    }
+
+    const calculatedReading = calculatedPowerReading(
+        ioregInteger(stdout, 'SystemCurrentIn'),
+        ioregInteger(stdout, 'SystemVoltageIn'),
+        'input calc'
+    );
+    if (calculatedReading !== undefined) {
+        return calculatedReading;
+    }
+
+    const batteryReading = calculatedPowerReading(
+        ioregInteger(stdout, 'Amperage'),
+        ioregInteger(stdout, 'Voltage'),
+        'battery calc'
+    );
+    if (batteryReading !== undefined) {
+        return batteryReading;
+    }
+
+    return undefined;
+}
+
+function telemetryPowerReading(stdout: string): PowerReading | undefined {
+    const candidates: Array<[string, string]> = [
+        ['SystemPowerIn', 'system input'],
+        ['SystemLoad', 'system load'],
+        ['WallEnergyEstimate', 'wall estimate'],
+        ['BatteryPower', 'battery power']
+    ];
+
+    for (const [key, detail] of candidates) {
+        const watts = milliwattsToWatts(ioregInteger(stdout, key));
+        if (watts !== undefined) {
+            return { watts, detail };
+        }
+    }
+
+    return undefined;
+}
+
+function calculatedPowerReading(
+    currentMilliAmps: number | undefined,
+    voltageMilliVolts: number | undefined,
+    detail: string
+): PowerReading | undefined {
+    if (currentMilliAmps === undefined || voltageMilliVolts === undefined) {
+        return undefined;
+    }
+
+    const watts = Math.abs(currentMilliAmps) * Math.abs(voltageMilliVolts)
+        / 1_000_000;
+    if (watts <= 0.1) {
+        return undefined;
+    }
+
+    return { watts, detail };
+}
+
+function powerReadingSnapshot(reading: PowerReading): HardwareSnapshot {
+    const rounded = reading.watts >= 10
+        ? Math.round(reading.watts)
+        : Number(reading.watts.toFixed(1));
+
+    return {
+        metric: 'power',
+        label: 'PWR',
+        value: `${rounded}W`,
+        detail: reading.detail,
+        percent: clamp(reading.watts / POWER_MAX_WATTS * 100, 0, 100),
+        status: powerStatus(reading.watts)
     };
 }
 
@@ -801,6 +914,14 @@ function plistInteger(plist: string, key: string): number | undefined {
     return Number.isFinite(value) ? value : undefined;
 }
 
+function ioregInteger(value: string, key: string): number | undefined {
+    const pattern = new RegExp(
+        `"${escapeRegExp(key)}"\\s*=\\s*(-?\\d+)`
+    );
+    const parsed = Number(pattern.exec(value)?.[1]);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -855,6 +976,18 @@ function batteryStatus(
     return 'ok';
 }
 
+function powerStatus(watts: number): HardwareSnapshot['status'] {
+    if (watts >= 220) {
+        return 'danger';
+    }
+
+    if (watts >= 150) {
+        return 'warn';
+    }
+
+    return 'ok';
+}
+
 function temperatureStatus(temperature: number): HardwareSnapshot['status'] {
     if (temperature >= 90) {
         return 'danger';
@@ -882,6 +1015,15 @@ function positiveTemperature(value: unknown): number | undefined {
     return Number.isFinite(numberValue) && numberValue > 0
         ? numberValue
         : undefined;
+}
+
+function milliwattsToWatts(value: number | undefined): number | undefined {
+    if (value === undefined || value === 0) {
+        return undefined;
+    }
+
+    const watts = Math.abs(value) / 1000;
+    return watts > 0.1 ? watts : undefined;
 }
 
 function average(values: number[]): number | undefined {

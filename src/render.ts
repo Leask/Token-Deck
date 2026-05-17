@@ -30,8 +30,6 @@ function renderTokenSVG(state: RenderState): string {
     const { snapshot } = state;
     const primary = snapshot.primary;
     const secondary = snapshot.secondary;
-    const remaining = Math.round(primary?.remainingPercent ?? 0);
-    const accent = colorForRemaining(remaining);
     const badges = [];
 
     if (state.status === 'refreshing') {
@@ -42,9 +40,8 @@ function renderTokenSVG(state: RenderState): string {
 
     return baseSVG([
         text(72, 24, snapshot.provider.toUpperCase(), 14, '#aab3c5', '700'),
-        text(72, 60, `${remaining}%`, 34, accent, '800'),
-        limitRow(18, 84, windowLabel(primary), primary, accent),
-        limitRow(18, 110, windowLabel(secondary), secondary, '#5aa2ff'),
+        limitBlock(18, 38, windowLabel(primary), primary),
+        limitBlock(18, 82, windowLabel(secondary), secondary),
         ...badges
     ]);
 }
@@ -101,16 +98,19 @@ function progressBar(
     ].join('');
 }
 
-function limitRow(
+function limitBlock(
     x: number,
     y: number,
     label: string,
-    window: RateWindow | undefined,
-    fill: string
+    window: RateWindow | undefined
 ): string {
+    const remaining = Math.round(window?.remainingPercent ?? 0);
+    const fill = colorForRemaining(remaining);
+
     return [
-        text(x + 11, y + 6, label, 10, '#aab3c5', '700'),
-        progressBar(x + 28, y, 88, 9, window, fill)
+        text(x + 13, y + 12, label, 10, '#aab3c5', '700'),
+        text(x + 70, y + 18, `${remaining}%`, 24, fill, '800'),
+        progressBar(x + 10, y + 28, 88, 8, window, fill)
     ].join('');
 }
 

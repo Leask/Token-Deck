@@ -108,6 +108,21 @@
 					"TitleAlignment": "middle"
 				}
 			]
+		},
+		{
+			"Name": "Battery Status",
+			"UUID": "com.leask.token-deck.battery",
+			"Icon": "imgs/actions/counter/icon",
+			"Tooltip": "Shows system battery or UPS charge.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/counter/key",
+					"TitleAlignment": "middle"
+				}
+			]
 		}
 	],
 	"Category": "Token Deck",

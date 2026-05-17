@@ -211,6 +211,13 @@ export class TemperatureStatusAction extends HardwareStatusAction {
     }
 }
 
+@action({ UUID: 'com.leask.token-deck.battery' })
+export class BatteryStatusAction extends HardwareStatusAction {
+    constructor() {
+        super('battery', 'BATT');
+    }
+}
+
 function positiveInteger(
     value: number | string | undefined,
     defaultValue: number

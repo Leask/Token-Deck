@@ -146,6 +146,10 @@ function colorForSnapshot(snapshot: HardwareSnapshot): string {
         return '#ff9f43';
     }
 
+    if (snapshot.metric === 'battery') {
+        return '#40d77b';
+    }
+
     return '#40d77b';
 }
 

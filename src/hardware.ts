@@ -16,7 +16,8 @@ export type HardwareMetric =
     | 'disk'
     | 'gpu'
     | 'network'
-    | 'temperature';
+    | 'temperature'
+    | 'battery';
 
 export type HardwareSnapshot = {
     metric: HardwareMetric;
@@ -60,12 +61,20 @@ type OSXTemperatureSensor = {
     cpuTemperature: () => unknown;
 };
 
+type BatteryReading = {
+    percent?: number;
+    source: string;
+    state: string;
+    detail: string;
+};
+
 const CPU_SAMPLE_MS = 250;
 const NETWORK_SAMPLE_MS = 750;
 const DISK_TIMEOUT_MS = 3_000;
 const GPU_TIMEOUT_MS = 5_000;
 const NETSTAT_TIMEOUT_MS = 3_000;
 const TEMPERATURE_TIMEOUT_MS = 3_000;
+const BATTERY_TIMEOUT_MS = 3_000;
 const TEMPERATURE_MIN_C = 30;
 const TEMPERATURE_MAX_C = 100;
 const EXTERNAL_NODE_CANDIDATES = [
@@ -90,6 +99,8 @@ export async function fetchHardwareSnapshot(
             return fetchNetworkSnapshot();
         case 'temperature':
             return fetchTemperatureSnapshot();
+        case 'battery':
+            return fetchBatterySnapshot();
     }
 }
 
@@ -357,6 +368,89 @@ async function fetchTemperatureSnapshot(): Promise<HardwareSnapshot> {
     }
 }
 
+async function fetchBatterySnapshot(): Promise<HardwareSnapshot> {
+    if (process.platform !== 'darwin') {
+        return unavailableSnapshot('battery', 'BATT', 'not macOS');
+    }
+
+    try {
+        const { stdout } = await execFileAsync('pmset', ['-g', 'batt'], {
+            timeout: BATTERY_TIMEOUT_MS,
+            maxBuffer: 1024 * 16
+        });
+        return batteryReadingSnapshot(parsePmsetBattery(stdout));
+    } catch {
+        return unavailableSnapshot('battery', 'BATT', 'no battery');
+    }
+}
+
+function parsePmsetBattery(stdout: string): BatteryReading {
+    const source = stdout.match(/Now drawing from '([^']+)'/)?.[1] ?? 'Power';
+    const batteryLines = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => /;\s*.*present:\s*true/i.test(line));
+
+    if (batteryLines.length === 0) {
+        return {
+            source,
+            state: 'AC',
+            detail: /no batteries/i.test(stdout) ? 'no battery' : source
+        };
+    }
+
+    const readings = batteryLines.flatMap((line) => {
+        const match = line.match(
+            /^-?(.+?)\s*(?:\(id=\d+\))?\s+(\d+(?:\.\d+)?)%;\s*(.+)$/i
+        );
+        if (match === null) {
+            return [];
+        }
+
+        return [{
+            percent: clamp(Number(match[2]), 0, 100),
+            source,
+            state: batteryState(match[3]),
+            detail: batteryDetail(match[1], match[3], source)
+        }];
+    });
+
+    if (readings.length === 0) {
+        return {
+            source,
+            state: 'unknown',
+            detail: source
+        };
+    }
+
+    return readings.reduce((lowest, reading) => {
+        return reading.percent < lowest.percent ? reading : lowest;
+    });
+}
+
+function batteryReadingSnapshot(reading: BatteryReading): HardwareSnapshot {
+    const percent = reading.percent;
+    if (percent === undefined) {
+        return {
+            metric: 'battery',
+            label: 'BATT',
+            value: 'AC',
+            detail: reading.detail,
+            percent: 100,
+            status: 'ok'
+        };
+    }
+
+    return {
+        metric: 'battery',
+        label: 'BATT',
+        value: `${Math.round(percent)}%`,
+        detail: reading.detail,
+        percent,
+        status: batteryStatus(percent, reading.state)
+    };
+}
+
 async function readOSXTemperature(): Promise<TemperatureReading | undefined> {
     const directReading = readOSXTemperatureInProcess();
     if (directReading !== undefined) {
@@ -401,6 +495,64 @@ async function readOSXTemperatureWithExternalNode(): Promise<
     }
 
     return undefined;
+}
+
+function batteryState(value: string): string {
+    const fields = batteryFields(value);
+    const firstState = fields.find((field) => {
+        return field.length > 0;
+    });
+
+    return firstState ?? 'unknown';
+}
+
+function batteryDetail(
+    name: string,
+    stateValue: string,
+    source: string
+): string {
+    const fields = batteryFields(stateValue);
+    const state = fields[0] ?? 'unknown';
+    const remaining = fields.find((field) => /remaining/i.test(field));
+
+    if (remaining !== undefined) {
+        const cleanRemaining = remaining.replace(/\s+/g, ' ');
+        return `${batterySourceLabel(source)} ${cleanRemaining}`;
+    }
+
+    if (/UPS|LCD|Battery/i.test(name)) {
+        return `${compactBatteryName(name)} ${state}`;
+    }
+
+    return `${batterySourceLabel(source)} ${state}`;
+}
+
+function batteryFields(value: string): string[] {
+    return value
+        .split(';')
+        .map((field) => {
+            return field.replace(/\s*present:\s*\w+/i, '').trim();
+        })
+        .filter((field) => field.length > 0);
+}
+
+function compactBatteryName(value: string): string {
+    return value
+        .replace(/^InternalBattery-\d+$/i, 'Internal')
+        .replace(/\s+/g, ' ')
+        .slice(0, 9);
+}
+
+function batterySourceLabel(value: string): string {
+    if (/battery/i.test(value)) {
+        return 'Battery';
+    }
+
+    if (/ac/i.test(value)) {
+        return 'AC';
+    }
+
+    return 'Power';
 }
 
 function osxTemperatureSensorModulePath(): string {
@@ -682,6 +834,21 @@ function pressureStatus(percent: number): HardwareSnapshot['status'] {
     }
 
     if (percent >= 65) {
+        return 'warn';
+    }
+
+    return 'ok';
+}
+
+function batteryStatus(
+    percent: number,
+    state: string
+): HardwareSnapshot['status'] {
+    if (percent <= 15) {
+        return 'danger';
+    }
+
+    if (percent <= 30 && /discharging|battery/i.test(state)) {
         return 'warn';
     }
 

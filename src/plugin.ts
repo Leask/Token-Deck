@@ -1,6 +1,7 @@
 import streamDeck from '@elgato/streamdeck';
 
 import {
+    BatteryStatusAction,
     CpuStatusAction,
     DiskStatusAction,
     GpuStatusAction,
@@ -18,4 +19,5 @@ streamDeck.actions.registerAction(new DiskStatusAction());
 streamDeck.actions.registerAction(new GpuStatusAction());
 streamDeck.actions.registerAction(new NetworkStatusAction());
 streamDeck.actions.registerAction(new TemperatureStatusAction());
+streamDeck.actions.registerAction(new BatteryStatusAction());
 streamDeck.connect();

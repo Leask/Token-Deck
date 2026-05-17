@@ -68,6 +68,7 @@ token key:
 - `GPU Status`
 - `Network Status`
 - `Temperature Status`
+- `Battery Status`
 
 The hardware keys refresh automatically and also refresh immediately when
 pressed.
@@ -80,3 +81,7 @@ array are counted once each instead of counting every APFS system volume.
 `Temperature Status` uses Apple SMC temperature readings when available. If the
 native sensor module cannot be loaded in the Stream Deck runtime, it falls back
 to macOS thermal pressure from `pmset -g therm` instead of showing an error.
+
+`Battery Status` uses `pmset -g batt` on macOS. It shows internal battery level
+on laptops, UPS charge on desktop Macs with a supported UPS, and AC/no battery
+when no battery source is present.

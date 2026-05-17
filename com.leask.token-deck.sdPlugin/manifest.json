@@ -18,6 +18,81 @@
 					"TitleAlignment": "middle"
 				}
 			]
+		},
+		{
+			"Name": "CPU Status",
+			"UUID": "com.leask.token-deck.cpu",
+			"Icon": "imgs/actions/counter/icon",
+			"Tooltip": "Shows current CPU usage.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/counter/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Memory Status",
+			"UUID": "com.leask.token-deck.memory",
+			"Icon": "imgs/actions/counter/icon",
+			"Tooltip": "Shows current memory usage.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/counter/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Disk Status",
+			"UUID": "com.leask.token-deck.disk",
+			"Icon": "imgs/actions/counter/icon",
+			"Tooltip": "Shows current disk usage.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/counter/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "GPU Status",
+			"UUID": "com.leask.token-deck.gpu",
+			"Icon": "imgs/actions/counter/icon",
+			"Tooltip": "Shows Apple Silicon GPU utilization when available.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/counter/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Network Status",
+			"UUID": "com.leask.token-deck.network",
+			"Icon": "imgs/actions/counter/icon",
+			"Tooltip": "Shows current network throughput.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/counter/key",
+					"TitleAlignment": "middle"
+				}
+			]
 		}
 	],
 	"Category": "Token Deck",

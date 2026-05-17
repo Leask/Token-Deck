@@ -48,7 +48,7 @@ The official Stream Deck CLI linked the plugin into:
 The link points back to this checkout's `com.leask.token-deck.sdPlugin`
 directory.
 
-## Current Action
+## Current Actions
 
 `AI Token Usage` renders:
 
@@ -58,3 +58,15 @@ directory.
 - secondary quota mini bar
 
 Pressing the key forces a refresh.
+
+Hardware status actions can be added as separate keys without changing the
+token key:
+
+- `CPU Status`
+- `Memory Status`
+- `Disk Status`
+- `GPU Status`
+- `Network Status`
+
+The hardware keys refresh automatically and also refresh immediately when
+pressed.

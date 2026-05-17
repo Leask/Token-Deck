@@ -143,7 +143,7 @@
 	"Category": "Token Deck",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
-	"Description": "AI token usage monitor powered by CodexBar.",
+	"Description": "AI token and Mac status monitor for Stream Deck.",
 	"Icon": "imgs/plugin/marketplace",
 	"SDKVersion": 3,
 	"Software": {

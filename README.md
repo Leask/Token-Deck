@@ -1,8 +1,9 @@
 # Token Deck
 
-Token Deck is a Stream Deck plugin for showing AI provider quota and token
-usage on a key. It is currently a local prototype powered by
-[CodexBar](https://github.com/steipete/CodexBar).
+Token Deck is a Stream Deck plugin for showing AI provider quota, token usage,
+and Mac hardware status on Stream Deck keys. The token action is powered by
+[CodexBar](https://github.com/steipete/CodexBar); the hardware actions read
+local macOS status directly.
 
 ## Requirements
 
@@ -31,6 +32,17 @@ the common Homebrew paths and then runs `codexbar` from `PATH`. If
 `HTTP Endpoint` is empty, Token Deck builds `http://127.0.0.1:<port>/usage` from
 the `HTTP Port` setting.
 
+## Architecture
+
+- Stream Deck runtime: Node.js/TypeScript via `@elgato/streamdeck`.
+- Token usage source: explicit `CLI` or `HTTP`; there is no hidden fallback
+  between data source modes.
+- Hardware sources: macOS system commands and Apple SMC readings, kept
+  independent from CodexBar.
+- Rendering: each action generates a compact SVG image and sends it to the key
+  with `setImage`.
+- Refresh: every key refreshes on its timer and immediately when pressed.
+
 ## Development
 
 ```bash
@@ -48,7 +60,7 @@ The official Stream Deck CLI linked the plugin into:
 The link points back to this checkout's `com.leask.token-deck.sdPlugin`
 directory.
 
-## Current Actions
+## Actions
 
 `AI Token Usage` renders:
 
@@ -74,10 +86,21 @@ token key:
 The hardware keys refresh automatically and also refresh immediately when
 pressed.
 
+`CPU Status` samples aggregate CPU activity over a short interval.
+
+`Memory Status` shows current used memory based on Node's OS memory counters.
+
 `Disk Status` aggregates mounted local physical storage and skips network
 mounts, Time Machine local snapshots, and disk images. On macOS APFS volumes are
 deduplicated by container, so the internal Data volume and an external USB disk
 array are counted once each instead of counting every APFS system volume.
+
+`GPU Status` reads Apple Silicon GPU utilization from `IOAccelerator` when that
+counter is exposed by macOS.
+
+`Network Status` samples local interface counters and shows combined download
+and upload throughput. Loopback, bridge, AWDL, and other virtual interfaces are
+ignored.
 
 `Temperature Status` uses Apple SMC temperature readings when available. If the
 native sensor module cannot be loaded in the Stream Deck runtime, it falls back
@@ -90,3 +113,20 @@ when no battery source is present.
 `Power Status` reads Apple SMC power keys without requiring sudo. If SMC power
 is unavailable, it falls back to Apple power telemetry from `ioreg`, then to
 voltage/current-derived power on systems that expose battery amperage.
+
+## Validation
+
+Use these checks before shipping a local change:
+
+```bash
+npx tsc --noEmit
+npm run build
+streamdeck validate com.leask.token-deck.sdPlugin
+streamdeck restart com.leask.token-deck
+```
+
+Runtime logs are written under:
+
+```text
+com.leask.token-deck.sdPlugin/logs/com.leask.token-deck.0.log
+```

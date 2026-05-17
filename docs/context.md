@@ -1,31 +1,21 @@
 # Token Deck Context
 
-## Research Summary
+## Current State
 
-Token Deck should start as a thin Stream Deck plugin that consumes CodexBar
-instead of duplicating provider integrations.
+Token Deck is a Stream Deck plugin for compact status keys:
 
-CodexBar facts used for this prototype:
+- `AI Token Usage` shows CodexBar quota/token usage.
+- Hardware actions show CPU, memory, disk, GPU, network, temperature, battery,
+  and system power status.
 
-- `codexbar usage --format json --json-only` returns provider usage JSON.
-- `codexbar cost --format json --json-only` exists for local Codex/Claude cost
-  scans, but it is not the first UI target.
-- `codexbar serve` exposes `GET /health`, `GET /usage`, and `GET /cost` on
-  `127.0.0.1`.
-- CodexBar is MIT licensed, but it is a Swift project. Reusing its internals
-  directly would complicate a Stream Deck plugin, so the CLI/HTTP boundary is
-  the cleaner first step.
+The token action remains a thin CodexBar client instead of duplicating provider
+integrations. The hardware actions are local macOS readers and do not depend on
+CodexBar.
 
-Stream Deck facts used for this prototype:
+## Token Data Source
 
-- Current SDK plugins run a Node.js backend.
-- Keys support dynamic title and image updates.
-- Stream Deck Neo has LCD keys suitable for compact status display.
-
-## Design Choice
-
-The data source is explicit. Token Deck does not silently fall back between
-data sources.
+The token data source is explicit. Token Deck does not silently fall back
+between data sources.
 
 CLI mode runs a short-lived command on each refresh:
 
@@ -48,6 +38,32 @@ The CLI parser intentionally scans stdout for the JSON payload because Codex
 notifications can be prepended before the JSON block. The refresh loop also
 prevents overlapping CodexBar calls for the same key.
 
+## Hardware Data Sources
+
+- CPU and memory use Node's `os` module.
+- Disk uses `df -k -P -l` plus `diskutil info -plist` on macOS to aggregate
+  local physical storage and deduplicate APFS containers.
+- GPU reads `IOAccelerator` counters from `ioreg`.
+- Network samples `netstat -ibn` and skips virtual/noisy interfaces.
+- Temperature reads `osx-temperature-sensor`/SMC first, then falls back to
+  `pmset -g therm`.
+- Battery reads `pmset -g batt`, which covers internal batteries and supported
+  UPS devices.
+- Power reads SMC keys `PSTR`, `PDTR`, and `PD0R` first, then falls back to
+  AppleSmartBattery telemetry and voltage/current calculations.
+
+Hardware actions should degrade to an explicit unknown/error visual if a metric
+is not available. They should not require sudo or long-running helper services.
+
+## Runtime Notes
+
+- Each key renders SVG and sends it with `setImage`; titles are cleared.
+- Timed refreshes keep the last successful image visible while showing a small
+  refresh badge.
+- Manual key press forces an immediate refresh.
+- Plugin logs live at
+  `com.leask.token-deck.sdPlugin/logs/com.leask.token-deck.0.log`.
+
 ## Next Decisions
 
 - Whether a managed-service mode is worth adding later, where the plugin starts
@@ -56,3 +72,5 @@ prevents overlapping CodexBar calls for the same key.
   provider.
 - Whether CodexBar should expose a smaller, Stream Deck-specific summary
   endpoint upstream.
+- Whether hardware actions need user-configurable thresholds.
+- Whether to replace temporary scaffold icons with dedicated Token Deck assets.

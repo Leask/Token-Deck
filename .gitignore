@@ -1,6 +1,10 @@
 # Node.js
 node_modules/
 
+# macOS
+.DS_Store
+**/.DS_Store
+
 # Stream Deck files
 *.sdPlugin/bin
 *.sdPlugin/logs

@@ -18,7 +18,7 @@ const CLI_TIMEOUT_MS = 20_000;
 
 export type TokenDeckSettings = JsonObject & {
     provider?: string;
-    mode?: 'auto' | 'http' | 'cli';
+    mode?: 'http' | 'cli';
     endpoint?: string;
     port?: number | string;
     codexbarPath?: string;
@@ -71,17 +71,11 @@ type RawProviderPayload = {
 export async function fetchTokenSnapshot(
     settings: TokenDeckSettings
 ): Promise<TokenSnapshot> {
-    const mode = settings.mode ?? 'auto';
+    const mode = normalizeMode(settings.mode);
     const provider = normalizeProvider(settings.provider);
 
-    if (mode !== 'cli') {
-        try {
-            return normalizePayload(await fetchFromHTTP(settings, provider));
-        } catch (error) {
-            if (mode === 'http') {
-                throw error;
-            }
-        }
+    if (mode === 'http') {
+        return normalizePayload(await fetchFromHTTP(settings, provider));
     }
 
     return normalizePayload(await fetchFromCLI(settings, provider));
@@ -211,6 +205,14 @@ function normalizeProvider(provider?: string): string {
     return normalized || DEFAULT_PROVIDER;
 }
 
+function normalizeMode(mode?: TokenDeckSettings['mode']): 'http' | 'cli' {
+    if (mode === 'http') {
+        return mode;
+    }
+
+    return 'cli';
+}
+
 function normalizeEndpoint(settings: TokenDeckSettings, provider: string): string {
     if (settings.endpoint?.trim()) {
         const url = new URL(settings.endpoint.trim());
@@ -232,11 +234,11 @@ function defaultCodexbarPath(): string {
 
 export function positiveInteger(
     value: number | string | undefined,
-    fallback: number
+    defaultValue: number
 ): number {
     const parsed = typeof value === 'string' ? Number(value) : value;
     if (typeof parsed !== 'number' || !Number.isFinite(parsed) || parsed <= 0) {
-        return fallback;
+        return defaultValue;
     }
 
     return Math.round(parsed);

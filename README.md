@@ -10,13 +10,26 @@ usage on a key. It is currently a local prototype powered by
 - Node.js 24 or newer.
 - CodexBar installed and configured.
 
-The easiest data path is to run CodexBar as a local JSON service:
+By default, the plugin uses `CLI` mode and runs a short-lived CodexBar command
+at each refresh:
+
+```bash
+codexbar usage --provider codex --format json --json-only
+```
+
+`HTTP` mode reads an explicitly running CodexBar JSON service:
 
 ```bash
 codexbar serve --port 8080 --refresh-interval 60
 ```
 
-The plugin can also call the `codexbar` CLI directly when HTTP is unavailable.
+The plugin never switches data sources automatically. Pick `CLI` or `HTTP` in
+the action settings.
+
+Custom connection fields are optional. If `CLI Path` is empty, Token Deck checks
+the common Homebrew paths and then runs `codexbar` from `PATH`. If
+`HTTP Endpoint` is empty, Token Deck builds `http://127.0.0.1:<port>/usage` from
+the `HTTP Port` setting.
 
 ## Development
 

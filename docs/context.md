@@ -24,21 +24,34 @@ Stream Deck facts used for this prototype:
 
 ## Design Choice
 
-Use this priority order:
+The data source is explicit. Token Deck does not silently fall back between
+data sources.
 
-1. Poll `http://127.0.0.1:8080/usage?provider=<provider>`.
-2. If HTTP fails and mode is `auto`, call:
+CLI mode runs a short-lived command on each refresh:
 
 ```bash
 codexbar usage --provider <provider> --format json --json-only
 ```
 
-The CLI fallback intentionally scans stdout for the JSON payload because Codex
-notifications can be prepended before the JSON block.
+HTTP mode reads a running CodexBar service:
+
+```text
+http://127.0.0.1:8080/usage?provider=<provider>
+```
+
+Within the selected mode, connection fields are allowed to be automatic. Empty
+`CLI Path` means the plugin tries common Homebrew install paths before using
+`codexbar` from `PATH`. Empty `HTTP Endpoint` means the plugin constructs the
+local `/usage` URL from the configured `HTTP Port`.
+
+The CLI parser intentionally scans stdout for the JSON payload because Codex
+notifications can be prepended before the JSON block. The refresh loop also
+prevents overlapping CodexBar calls for the same key.
 
 ## Next Decisions
 
-- Whether the plugin should start and supervise `codexbar serve` itself.
+- Whether a managed-service mode is worth adding later, where the plugin starts
+  and supervises `codexbar serve` itself.
 - Whether `provider=all` should rotate providers or render the lowest remaining
   provider.
 - Whether CodexBar should expose a smaller, Stream Deck-specific summary

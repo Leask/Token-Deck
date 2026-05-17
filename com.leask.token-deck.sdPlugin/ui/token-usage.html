@@ -5,6 +5,24 @@
     <title>Token Deck Settings</title>
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+    <style>
+        .numeric-input {
+            box-sizing: border-box;
+            width: 100%;
+            height: 28px;
+            padding: 5px 7px;
+            color: #d8d8d8;
+            background: #3d3d3d;
+            border: 1px solid #303030;
+            border-radius: 3px;
+            font: 12px -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        .numeric-input:focus {
+            outline: none;
+            box-shadow: inset 0 0 1px #d8d8d8;
+        }
+    </style>
 </head>
 
 <body>
@@ -19,29 +37,139 @@
         </sdpi-select>
     </sdpi-item>
 
-    <sdpi-item label="Mode">
-        <sdpi-select setting="mode" default="auto">
-            <option value="auto">HTTP, then CLI</option>
-            <option value="http">HTTP only</option>
-            <option value="cli">CLI only</option>
+    <sdpi-item label="Data Source">
+        <sdpi-select setting="mode" default="cli">
+            <option value="cli">CLI</option>
+            <option value="http">HTTP</option>
         </sdpi-select>
     </sdpi-item>
 
     <sdpi-item label="HTTP Port">
-        <sdpi-range setting="port" min="1" max="65535" step="1" default="8080" showlabels></sdpi-range>
+        <input
+            id="port"
+            class="numeric-input"
+            data-setting="port"
+            type="number"
+            min="1"
+            max="65535"
+            step="1"
+            value="8080"
+            inputmode="numeric">
     </sdpi-item>
 
-    <sdpi-item label="Refresh">
-        <sdpi-range setting="refreshIntervalSeconds" min="15" max="900" step="15" default="60" showlabels></sdpi-range>
+    <sdpi-item label="Refresh Sec">
+        <input
+            id="refreshIntervalSeconds"
+            class="numeric-input"
+            data-setting="refreshIntervalSeconds"
+            type="number"
+            min="15"
+            max="3600"
+            step="1"
+            value="60"
+            inputmode="numeric">
     </sdpi-item>
 
-    <sdpi-item label="Endpoint">
-        <sdpi-textfield setting="endpoint" placeholder="http://127.0.0.1:8080/usage"></sdpi-textfield>
+    <sdpi-item label="HTTP Endpoint">
+        <sdpi-textfield
+            setting="endpoint"
+            placeholder="Auto: http://127.0.0.1:&lt;port&gt;/usage">
+        </sdpi-textfield>
     </sdpi-item>
 
     <sdpi-item label="CLI Path">
-        <sdpi-textfield setting="codexbarPath" placeholder="codexbar"></sdpi-textfield>
+        <sdpi-textfield
+            setting="codexbarPath"
+            placeholder="Auto: codexbar">
+        </sdpi-textfield>
     </sdpi-item>
+
+    <script>
+        (() => {
+            const defaults = {
+                port: '8080',
+                refreshIntervalSeconds: '60'
+            };
+            const numericSettings = Object.keys(defaults);
+            let currentSettings = {};
+
+            const settingsFromPayload = (payload) => {
+                return payload?.settings || payload?.payload?.settings || {};
+            };
+
+            const fieldFor = (setting) => {
+                return document.querySelector(`[data-setting="${setting}"]`);
+            };
+
+            const normalizedValue = (setting, value) => {
+                const fallback = defaults[setting];
+                const parsed = Number(value ?? fallback);
+                if (!Number.isFinite(parsed) || parsed <= 0) {
+                    return fallback;
+                }
+
+                return String(Math.round(parsed));
+            };
+
+            const applySettings = (settings) => {
+                currentSettings = {
+                    ...currentSettings,
+                    ...settings
+                };
+
+                for (const setting of numericSettings) {
+                    const field = fieldFor(setting);
+                    if (field !== null) {
+                        field.value = normalizedValue(setting, currentSettings[setting]);
+                    }
+                }
+            };
+
+            const saveField = async (setting) => {
+                const client = window.SDPIComponents?.streamDeckClient;
+                const field = fieldFor(setting);
+                if (client === undefined || field === null) {
+                    return;
+                }
+
+                const payload = await client.getSettings();
+                const latestSettings = settingsFromPayload(payload);
+                const nextSettings = {
+                    ...latestSettings,
+                    [setting]: normalizedValue(setting, field.value)
+                };
+                field.value = nextSettings[setting];
+                currentSettings = nextSettings;
+                await client.setSettings(nextSettings);
+            };
+
+            const initialize = async () => {
+                const client = window.SDPIComponents?.streamDeckClient;
+                if (client === undefined) {
+                    return;
+                }
+
+                client.didReceiveSettings.subscribe((event) => {
+                    applySettings(settingsFromPayload(event));
+                });
+
+                const payload = await client.getSettings();
+                const settings = settingsFromPayload(payload);
+                applySettings(settings);
+            };
+
+            for (const setting of numericSettings) {
+                const field = fieldFor(setting);
+                field?.addEventListener('change', () => {
+                    void saveField(setting);
+                });
+            }
+
+            customElements.whenDefined('sdpi-item')
+                .then(() => initialize())
+                .catch(() => undefined);
+        })();
+    </script>
 </body>
 
 </html>

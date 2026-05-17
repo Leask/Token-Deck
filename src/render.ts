@@ -3,9 +3,15 @@ import { RateWindow, TokenSnapshot } from './codexbar';
 type RenderState =
     | { status: 'loading' }
     | { status: 'error'; message: string }
-    | { status: 'ready'; snapshot: TokenSnapshot };
+    | { status: 'ready'; snapshot: TokenSnapshot }
+    | { status: 'refreshing'; snapshot: TokenSnapshot }
+    | { status: 'stale-error'; message: string; snapshot: TokenSnapshot };
 
 export function renderTokenImage(state: RenderState): string {
+    return svgDataURL(renderTokenSVG(state));
+}
+
+function renderTokenSVG(state: RenderState): string {
     if (state.status === 'loading') {
         return baseSVG([
             text(72, 62, 'Token', 22, '#ffffff', '700'),
@@ -27,6 +33,13 @@ export function renderTokenImage(state: RenderState): string {
     const remaining = Math.round(primary?.remainingPercent ?? 0);
     const accent = colorForRemaining(remaining);
     const reset = resetText(primary);
+    const badges = [];
+
+    if (state.status === 'refreshing') {
+        badges.push(updatingBadge(116, 23));
+    } else if (state.status === 'stale-error') {
+        badges.push(errorBadge(116, 23));
+    }
 
     return baseSVG([
         text(72, 24, snapshot.provider.toUpperCase(), 14, '#aab3c5', '700'),
@@ -35,8 +48,13 @@ export function renderTokenImage(state: RenderState): string {
         progressBar(18, 98, 108, 9, primary, accent),
         text(28, 119, windowLabel(primary), 10, '#aab3c5', '700'),
         text(72, 119, reset, 10, '#d9deea', '700'),
-        progressBar(96, 116, 30, 5, secondary, '#5aa2ff')
+        progressBar(96, 116, 30, 5, secondary, '#5aa2ff'),
+        ...badges
     ]);
+}
+
+function svgDataURL(svg: string): string {
+    return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
 }
 
 function baseSVG(children: string[]): string {
@@ -84,6 +102,35 @@ function progressBar(
         ` rx="${height / 2}" fill="#2b3140"/>`,
         `<rect x="${x}" y="${y}" width="${filledWidth}" height="${height}"`,
         ` rx="${height / 2}" fill="${fill}"/>`
+    ].join('');
+}
+
+function updatingBadge(x: number, y: number): string {
+    return [
+        `<g transform="translate(${x} ${y})">`,
+        '<circle cx="0" cy="0" r="10" fill="#202637"',
+        ' stroke="#5aa2ff" stroke-width="1.5"/>',
+        '<path d="M -5 -1 A 6 6 0 0 1 4 -5"',
+        ' fill="none" stroke="#9ec7ff" stroke-width="2"',
+        ' stroke-linecap="round"/>',
+        '<path d="M 4 -5 L 6 -9 L 8 -5 Z" fill="#9ec7ff"/>',
+        '<path d="M 5 1 A 6 6 0 0 1 -4 5"',
+        ' fill="none" stroke="#9ec7ff" stroke-width="2"',
+        ' stroke-linecap="round"/>',
+        '<path d="M -4 5 L -6 9 L -8 5 Z" fill="#9ec7ff"/>',
+        '</g>'
+    ].join('');
+}
+
+function errorBadge(x: number, y: number): string {
+    return [
+        `<g transform="translate(${x} ${y})">`,
+        '<circle cx="0" cy="0" r="10" fill="#3a2027"',
+        ' stroke="#ff6b6b" stroke-width="1.5"/>',
+        '<line x1="0" y1="-5" x2="0" y2="1"',
+        ' stroke="#ffd1d1" stroke-width="2" stroke-linecap="round"/>',
+        '<circle cx="0" cy="5" r="1.4" fill="#ffd1d1"/>',
+        '</g>'
     ].join('');
 }
 

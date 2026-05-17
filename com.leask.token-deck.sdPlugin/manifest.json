@@ -93,6 +93,21 @@
 					"TitleAlignment": "middle"
 				}
 			]
+		},
+		{
+			"Name": "Temperature Status",
+			"UUID": "com.leask.token-deck.temperature",
+			"Icon": "imgs/actions/counter/icon",
+			"Tooltip": "Shows system temperature or thermal state.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/counter/key",
+					"TitleAlignment": "middle"
+				}
+			]
 		}
 	],
 	"Category": "Token Deck",

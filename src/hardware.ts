@@ -1,10 +1,22 @@
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
+const requireFromRuntime = createRequire(import.meta.url);
+const runtimeDirectory = path.dirname(fileURLToPath(import.meta.url));
 
-export type HardwareMetric = 'cpu' | 'memory' | 'disk' | 'gpu' | 'network';
+export type HardwareMetric =
+    | 'cpu'
+    | 'memory'
+    | 'disk'
+    | 'gpu'
+    | 'network'
+    | 'temperature';
 
 export type HardwareSnapshot = {
     metric: HardwareMetric;
@@ -38,11 +50,29 @@ type DiskVolume = {
     availableBytes: number;
 };
 
+type TemperatureReading = {
+    main?: number;
+    cores: number[];
+    max?: number;
+};
+
+type OSXTemperatureSensor = {
+    cpuTemperature: () => unknown;
+};
+
 const CPU_SAMPLE_MS = 250;
 const NETWORK_SAMPLE_MS = 750;
 const DISK_TIMEOUT_MS = 3_000;
 const GPU_TIMEOUT_MS = 5_000;
 const NETSTAT_TIMEOUT_MS = 3_000;
+const TEMPERATURE_TIMEOUT_MS = 3_000;
+const TEMPERATURE_MIN_C = 30;
+const TEMPERATURE_MAX_C = 100;
+const EXTERNAL_NODE_CANDIDATES = [
+    '/opt/homebrew/bin/node',
+    '/usr/local/bin/node',
+    'node'
+];
 
 export async function fetchHardwareSnapshot(
     metric: HardwareMetric
@@ -58,6 +88,8 @@ export async function fetchHardwareSnapshot(
             return fetchGPUSnapshot();
         case 'network':
             return fetchNetworkSnapshot();
+        case 'temperature':
+            return fetchTemperatureSnapshot();
     }
 }
 
@@ -308,6 +340,206 @@ async function fetchNetworkSnapshot(): Promise<HardwareSnapshot> {
     };
 }
 
+async function fetchTemperatureSnapshot(): Promise<HardwareSnapshot> {
+    if (process.platform !== 'darwin') {
+        return unavailableSnapshot('temperature', 'TEMP', 'not macOS');
+    }
+
+    const reading = await readOSXTemperature();
+    if (reading !== undefined) {
+        return temperatureReadingSnapshot(reading);
+    }
+
+    try {
+        return await readThermalPressureSnapshot();
+    } catch {
+        return unavailableSnapshot('temperature', 'TEMP', 'no sensor');
+    }
+}
+
+async function readOSXTemperature(): Promise<TemperatureReading | undefined> {
+    const directReading = readOSXTemperatureInProcess();
+    if (directReading !== undefined) {
+        return directReading;
+    }
+
+    return readOSXTemperatureWithExternalNode();
+}
+
+function readOSXTemperatureInProcess(): TemperatureReading | undefined {
+    try {
+        const sensor = requireFromRuntime(
+            'osx-temperature-sensor'
+        ) as OSXTemperatureSensor;
+
+        return normalizeTemperatureReading(sensor.cpuTemperature());
+    } catch {
+        return undefined;
+    }
+}
+
+async function readOSXTemperatureWithExternalNode(): Promise<
+    TemperatureReading | undefined
+> {
+    const modulePath = osxTemperatureSensorModulePath();
+    const script = [
+        `const sensor = require(${JSON.stringify(modulePath)});`,
+        'console.log(JSON.stringify(sensor.cpuTemperature()));'
+    ].join('');
+
+    for (const nodePath of EXTERNAL_NODE_CANDIDATES) {
+        try {
+            const { stdout } = await execFileAsync(nodePath, ['-e', script], {
+                timeout: TEMPERATURE_TIMEOUT_MS,
+                maxBuffer: 1024 * 16
+            });
+
+            return normalizeTemperatureReading(JSON.parse(stdout));
+        } catch {
+            continue;
+        }
+    }
+
+    return undefined;
+}
+
+function osxTemperatureSensorModulePath(): string {
+    const candidates = [
+        path.resolve(
+            runtimeDirectory,
+            '../../node_modules/osx-temperature-sensor'
+        ),
+        path.resolve(process.cwd(), 'node_modules/osx-temperature-sensor')
+    ];
+
+    return candidates.find((candidate) => {
+        return fs.existsSync(candidate);
+    }) ?? 'osx-temperature-sensor';
+}
+
+function normalizeTemperatureReading(
+    value: unknown
+): TemperatureReading | undefined {
+    if (typeof value !== 'object' || value === null) {
+        return undefined;
+    }
+
+    const raw = value as {
+        main?: unknown;
+        cores?: unknown;
+        max?: unknown;
+    };
+    const cores = Array.isArray(raw.cores)
+        ? raw.cores.flatMap((core) => {
+            const value = positiveTemperature(core);
+            return value === undefined ? [] : [value];
+        })
+        : [];
+    const main = positiveTemperature(raw.main) ?? average(cores);
+    const max = positiveTemperature(raw.max)
+        ?? (cores.length > 0 ? Math.max(...cores) : undefined)
+        ?? main;
+
+    if (main === undefined && max === undefined) {
+        return undefined;
+    }
+
+    return {
+        main,
+        cores,
+        max
+    };
+}
+
+function temperatureReadingSnapshot(
+    reading: TemperatureReading
+): HardwareSnapshot {
+    const current = reading.max ?? reading.main ?? 0;
+    const averageTemperature = reading.main;
+    const detail = averageTemperature === undefined
+        ? 'Apple SMC'
+        : `avg ${Math.round(averageTemperature)}C`;
+
+    return {
+        metric: 'temperature',
+        label: 'TEMP',
+        value: `${Math.round(current)}C`,
+        detail,
+        percent: temperaturePercent(current),
+        status: temperatureStatus(current)
+    };
+}
+
+async function readThermalPressureSnapshot(): Promise<HardwareSnapshot> {
+    const { stdout } = await execFileAsync('pmset', ['-g', 'therm'], {
+        timeout: TEMPERATURE_TIMEOUT_MS,
+        maxBuffer: 1024 * 16
+    });
+    const state = parseThermalPressure(stdout);
+
+    return {
+        metric: 'temperature',
+        label: 'TEMP',
+        value: state.value,
+        detail: state.detail,
+        percent: state.percent,
+        status: state.status
+    };
+}
+
+function parseThermalPressure(stdout: string): {
+    value: string;
+    detail: string;
+    percent: number;
+    status: HardwareSnapshot['status'];
+} {
+    const activeLines = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .filter((line) => !/^note:\s+no .* has been recorded$/i.test(line));
+
+    if (activeLines.length === 0) {
+        return {
+            value: 'OK',
+            detail: 'thermal nominal',
+            percent: 0,
+            status: 'ok'
+        };
+    }
+
+    const speedLimit = minNumberMatch(
+        activeLines.join('\n'),
+        /(?:CPU|GPU)_Speed_Limit\s*=\s*(\d+(?:\.\d+)?)/g
+    );
+    if (speedLimit !== undefined && speedLimit < 95) {
+        const pressure = clamp(100 - speedLimit, 0, 100);
+        return {
+            value: speedLimit < 70 ? 'HOT' : 'WARM',
+            detail: `limit ${Math.round(speedLimit)}%`,
+            percent: pressure,
+            status: speedLimit < 70 ? 'danger' : 'warn'
+        };
+    }
+
+    const text = activeLines.join(' ').toLowerCase();
+    if (/critical|shutdown|sleep|danger/.test(text)) {
+        return {
+            value: 'HOT',
+            detail: 'thermal critical',
+            percent: 90,
+            status: 'danger'
+        };
+    }
+
+    return {
+        value: 'WARM',
+        detail: compactThermalDetail(activeLines[0]),
+        percent: 65,
+        status: 'warn'
+    };
+}
+
 function readCPUTimes(): CpuTimes {
     return os.cpus().reduce<CpuTimes>((result, cpu) => {
         const times = cpu.times;
@@ -381,6 +613,22 @@ function maxNumberMatch(
     return result;
 }
 
+function minNumberMatch(
+    value: string,
+    pattern: RegExp
+): number | undefined {
+    let result: number | undefined;
+    for (const match of value.matchAll(pattern)) {
+        const parsed = Number(match[1]);
+        if (!Number.isFinite(parsed)) {
+            continue;
+        }
+        result = result === undefined ? parsed : Math.min(result, parsed);
+    }
+
+    return result;
+}
+
 function appleGPUModel(value: string): string {
     const match = value.match(/"model"\s*=\s*"([^"]+)"/);
     return match?.[1] ?? 'Apple GPU';
@@ -440,6 +688,43 @@ function pressureStatus(percent: number): HardwareSnapshot['status'] {
     return 'ok';
 }
 
+function temperatureStatus(temperature: number): HardwareSnapshot['status'] {
+    if (temperature >= 90) {
+        return 'danger';
+    }
+
+    if (temperature >= 75) {
+        return 'warn';
+    }
+
+    return 'ok';
+}
+
+function temperaturePercent(temperature: number): number {
+    return clamp(
+        (temperature - TEMPERATURE_MIN_C)
+            / (TEMPERATURE_MAX_C - TEMPERATURE_MIN_C)
+            * 100,
+        0,
+        100
+    );
+}
+
+function positiveTemperature(value: unknown): number | undefined {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) && numberValue > 0
+        ? numberValue
+        : undefined;
+}
+
+function average(values: number[]): number | undefined {
+    if (values.length === 0) {
+        return undefined;
+    }
+
+    return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
 function formatRate(bytesPerSecond: number): string {
     return `${formatBytes(bytesPerSecond)}/s`;
 }
@@ -459,6 +744,13 @@ function formatBytes(bytes: number): string {
     }
 
     return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)}${units[index]}`;
+}
+
+function compactThermalDetail(value: string): string {
+    return value
+        .replace(/^note:\s*/i, '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 20);
 }
 
 function clamp(value: number, min: number, max: number): number {

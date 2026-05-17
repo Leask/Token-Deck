@@ -5,7 +5,8 @@ import {
     DiskStatusAction,
     GpuStatusAction,
     MemoryStatusAction,
-    NetworkStatusAction
+    NetworkStatusAction,
+    TemperatureStatusAction
 } from './actions/hardware-status';
 import { TokenUsageAction } from './actions/token-usage';
 
@@ -16,4 +17,5 @@ streamDeck.actions.registerAction(new MemoryStatusAction());
 streamDeck.actions.registerAction(new DiskStatusAction());
 streamDeck.actions.registerAction(new GpuStatusAction());
 streamDeck.actions.registerAction(new NetworkStatusAction());
+streamDeck.actions.registerAction(new TemperatureStatusAction());
 streamDeck.connect();

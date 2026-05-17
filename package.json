@@ -18,5 +18,8 @@
     },
     "dependencies": {
         "@elgato/streamdeck": "^2.0.0"
+    },
+    "optionalDependencies": {
+        "osx-temperature-sensor": "^1.0.8"
     }
 }

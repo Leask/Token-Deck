@@ -142,6 +142,10 @@ function colorForSnapshot(snapshot: HardwareSnapshot): string {
         return '#b48cff';
     }
 
+    if (snapshot.metric === 'temperature') {
+        return '#ff9f43';
+    }
+
     return '#40d77b';
 }
 

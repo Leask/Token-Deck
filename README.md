@@ -67,6 +67,7 @@ token key:
 - `Disk Status`
 - `GPU Status`
 - `Network Status`
+- `Temperature Status`
 
 The hardware keys refresh automatically and also refresh immediately when
 pressed.
@@ -75,3 +76,7 @@ pressed.
 mounts, Time Machine local snapshots, and disk images. On macOS APFS volumes are
 deduplicated by container, so the internal Data volume and an external USB disk
 array are counted once each instead of counting every APFS system volume.
+
+`Temperature Status` uses Apple SMC temperature readings when available. If the
+native sensor module cannot be loaded in the Stream Deck runtime, it falls back
+to macOS thermal pressure from `pmset -g therm` instead of showing an error.

@@ -40,8 +40,8 @@ function renderTokenSVG(state: RenderState): string {
 
     return baseSVG([
         text(72, 24, snapshot.provider.toUpperCase(), 14, '#aab3c5', '700'),
-        limitBlock(18, 38, windowLabel(primary), primary),
-        limitBlock(18, 82, windowLabel(secondary), secondary),
+        limitBlock(18, 38, windowLabel(primary), primary, 'short'),
+        limitBlock(18, 82, windowLabel(secondary), secondary, 'long'),
         ...badges
     ]);
 }
@@ -102,10 +102,11 @@ function limitBlock(
     x: number,
     y: number,
     label: string,
-    window: RateWindow | undefined
+    window: RateWindow | undefined,
+    tone: 'short' | 'long'
 ): string {
     const remaining = Math.round(window?.remainingPercent ?? 0);
-    const fill = colorForRemaining(remaining);
+    const fill = colorForRemaining(remaining, tone);
 
     return [
         text(x + 13, y + 12, label, 10, '#aab3c5', '700'),
@@ -143,16 +144,16 @@ function errorBadge(x: number, y: number): string {
     ].join('');
 }
 
-function colorForRemaining(remaining: number): string {
+function colorForRemaining(remaining: number, tone: 'short' | 'long'): string {
     if (remaining >= 50) {
-        return '#40d77b';
+        return tone === 'short' ? '#40d77b' : '#5aa2ff';
     }
 
     if (remaining >= 20) {
-        return '#ffd166';
+        return tone === 'short' ? '#ffd166' : '#b48cff';
     }
 
-    return '#ff6b6b';
+    return tone === 'short' ? '#ff6b6b' : '#ff77b7';
 }
 
 function windowLabel(window: RateWindow | undefined): string {

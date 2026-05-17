@@ -62,6 +62,10 @@ type OSXTemperatureSensor = {
     cpuTemperature: () => unknown;
 };
 
+type OSXSMCSensor = {
+    get: (key: string) => unknown;
+};
+
 type BatteryReading = {
     percent?: number;
     source: string;
@@ -83,6 +87,7 @@ const TEMPERATURE_TIMEOUT_MS = 3_000;
 const BATTERY_TIMEOUT_MS = 3_000;
 const POWER_TIMEOUT_MS = 3_000;
 const POWER_MAX_WATTS = 250;
+const SMC_POWER_KEYS = ['PSTR', 'PDTR', 'PD0R'];
 const TEMPERATURE_MIN_C = 30;
 const TEMPERATURE_MAX_C = 100;
 const EXTERNAL_NODE_CANDIDATES = [
@@ -399,6 +404,11 @@ async function fetchPowerSnapshot(): Promise<HardwareSnapshot> {
         return unavailableSnapshot('power', 'PWR', 'not macOS');
     }
 
+    const smcReading = await readSMCPower();
+    if (smcReading !== undefined) {
+        return powerReadingSnapshot(smcReading);
+    }
+
     try {
         const { stdout } = await execFileAsync(
             'ioreg',
@@ -417,6 +427,66 @@ async function fetchPowerSnapshot(): Promise<HardwareSnapshot> {
     } catch {
         return unavailableSnapshot('power', 'PWR', 'no meter');
     }
+}
+
+async function readSMCPower(): Promise<PowerReading | undefined> {
+    const directReading = readSMCPowerInProcess();
+    if (directReading !== undefined) {
+        return directReading;
+    }
+
+    return readSMCPowerWithExternalNode();
+}
+
+function readSMCPowerInProcess(): PowerReading | undefined {
+    try {
+        const sensor = requireFromRuntime(osxSMCModulePath()) as OSXSMCSensor;
+        return readSMCPowerKeys((key) => {
+            return sensor.get(key);
+        });
+    } catch {
+        return undefined;
+    }
+}
+
+async function readSMCPowerWithExternalNode(): Promise<PowerReading | undefined> {
+    const modulePath = osxSMCModulePath();
+    const script = [
+        `const smc = require(${JSON.stringify(modulePath)});`,
+        `const keys = ${JSON.stringify(SMC_POWER_KEYS)};`,
+        'for (const key of keys) {',
+        '  const value = Number(smc.get(key));',
+        '  if (Number.isFinite(value) && value > 0.1) {',
+        '    console.log(JSON.stringify({ key, watts: value }));',
+        '    process.exit(0);',
+        '  }',
+        '}',
+        'process.exit(1);'
+    ].join('');
+
+    for (const nodePath of EXTERNAL_NODE_CANDIDATES) {
+        try {
+            const { stdout } = await execFileAsync(nodePath, ['-e', script], {
+                timeout: POWER_TIMEOUT_MS,
+                maxBuffer: 1024 * 16
+            });
+            const parsed = JSON.parse(stdout) as {
+                key?: unknown;
+                watts?: unknown;
+            };
+            const watts = positivePower(parsed.watts);
+            if (watts !== undefined && typeof parsed.key === 'string') {
+                return {
+                    watts,
+                    detail: `SMC ${parsed.key}`
+                };
+            }
+        } catch {
+            continue;
+        }
+    }
+
+    return undefined;
 }
 
 function parsePmsetBattery(stdout: string): BatteryReading {
@@ -564,6 +634,22 @@ function powerReadingSnapshot(reading: PowerReading): HardwareSnapshot {
     };
 }
 
+function readSMCPowerKeys(
+    readKey: (key: string) => unknown
+): PowerReading | undefined {
+    for (const key of SMC_POWER_KEYS) {
+        const watts = positivePower(readKey(key));
+        if (watts !== undefined) {
+            return {
+                watts,
+                detail: `SMC ${key}`
+            };
+        }
+    }
+
+    return undefined;
+}
+
 async function readOSXTemperature(): Promise<TemperatureReading | undefined> {
     const directReading = readOSXTemperatureInProcess();
     if (directReading !== undefined) {
@@ -680,6 +766,15 @@ function osxTemperatureSensorModulePath(): string {
     return candidates.find((candidate) => {
         return fs.existsSync(candidate);
     }) ?? 'osx-temperature-sensor';
+}
+
+function osxSMCModulePath(): string {
+    const modulePath = osxTemperatureSensorModulePath();
+    if (path.isAbsolute(modulePath)) {
+        return path.resolve(modulePath, 'build/Release/smc');
+    }
+
+    return 'osx-temperature-sensor/build/Release/smc';
 }
 
 function normalizeTemperatureReading(
@@ -1013,6 +1108,13 @@ function temperaturePercent(temperature: number): number {
 function positiveTemperature(value: unknown): number | undefined {
     const numberValue = Number(value);
     return Number.isFinite(numberValue) && numberValue > 0
+        ? numberValue
+        : undefined;
+}
+
+function positivePower(value: unknown): number | undefined {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) && numberValue > 0.1
         ? numberValue
         : undefined;
 }

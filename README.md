@@ -87,6 +87,6 @@ to macOS thermal pressure from `pmset -g therm` instead of showing an error.
 on laptops, UPS charge on desktop Macs with a supported UPS, and AC/no battery
 when no battery source is present.
 
-`Power Status` reads Apple power telemetry from `ioreg` without requiring sudo.
-It reports current system input power when available, and falls back to
+`Power Status` reads Apple SMC power keys without requiring sudo. If SMC power
+is unavailable, it falls back to Apple power telemetry from `ioreg`, then to
 voltage/current-derived power on systems that expose battery amperage.

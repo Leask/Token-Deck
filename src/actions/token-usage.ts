@@ -129,9 +129,6 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
                 snapshot
             }));
             await action.setTitle('');
-            if (showLoading) {
-                await action.showOk();
-            }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             streamDeck.logger.error(`Token Deck refresh failed: ${message}`);

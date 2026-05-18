@@ -9,6 +9,9 @@ local macOS status directly.
 
 <img width="2048" height="1536" alt="IMG_2886" src="https://github.com/user-attachments/assets/d4b66d84-b77b-44c6-b40b-8760b95d2f1d" />
 
+<img width="2048" height="1536" alt="IMG_2886" src="https://github.com/user-attachments/assets/b135740c-3841-4dfd-a3ec-a275319a5425" />
+
+
 ## Requirements
 
 - macOS with Elgato Stream Deck 7.1 or newer.

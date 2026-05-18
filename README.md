@@ -4,7 +4,7 @@
 
 Token Deck is a Stream Deck plugin for showing AI provider quota, token usage,
 and Mac hardware status on Stream Deck keys. The token action is powered by
-[CodexBar](https://github.com/steipete/CodexBar); the hardware actions read
+[CodexBar](https://github.com/steipete/CodexBar), the hardware actions read
 local macOS status directly.
 
 <img width="962" height="932" alt="Screenshot 2026-05-17 at 7 29 55 PM" src="https://github.com/user-attachments/assets/2d8ac047-c8cd-4c4b-9316-11a5033baf5a" />

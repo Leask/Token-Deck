@@ -19,8 +19,12 @@ By default, the plugin uses `CLI` mode and runs a short-lived CodexBar command
 at each refresh:
 
 ```bash
-codexbar usage --provider codex --format json --json-only
+codexbar usage --provider codex --source cli --format json --json-only
 ```
+
+For non-Codex providers, Token Deck keeps CodexBar's provider-specific default
+source selection. CLI subprocesses receive common Homebrew and system bin paths
+so Stream Deck can find provider CLIs without inheriting your login shell PATH.
 
 `HTTP` mode reads an explicitly running CodexBar JSON service:
 

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { delimiter, dirname } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { JsonObject } from '@elgato/utils';
@@ -12,6 +13,15 @@ const CODEXBAR_PATH_CANDIDATES = [
     '/opt/homebrew/bin/codexbar',
     '/usr/local/bin/codexbar',
     'codexbar'
+];
+const CHILD_PATH_ENTRIES = [
+    '/opt/homebrew/opt/node/bin',
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
 ];
 const HTTP_TIMEOUT_MS = 10_000;
 const CLI_TIMEOUT_MS = 20_000;
@@ -112,6 +122,7 @@ async function fetchFromCLI(
         'usage',
         '--provider',
         provider,
+        ...codexSourceArgs(provider),
         '--format',
         'json',
         '--json-only'
@@ -120,6 +131,7 @@ async function fetchFromCLI(
     try {
         const { stdout } = await execFileAsync(codexbarPath, args, {
             timeout: CLI_TIMEOUT_MS,
+            env: codexbarEnv(codexbarPath),
             maxBuffer: 1024 * 1024 * 4
         });
         return parseJSONPayload(stdout);
@@ -205,6 +217,14 @@ function normalizeProvider(provider?: string): string {
     return normalized || DEFAULT_PROVIDER;
 }
 
+function codexSourceArgs(provider: string): string[] {
+    if (provider !== DEFAULT_PROVIDER) {
+        return [];
+    }
+
+    return ['--source', 'cli'];
+}
+
 function normalizeMode(mode?: TokenDeckSettings['mode']): 'http' | 'cli' {
     if (mode === 'http') {
         return mode;
@@ -230,6 +250,52 @@ function defaultCodexbarPath(): string {
     return CODEXBAR_PATH_CANDIDATES.find((candidate) => {
         return candidate === 'codexbar' || existsSync(candidate);
     }) ?? 'codexbar';
+}
+
+function codexbarEnv(codexbarPath: string): NodeJS.ProcessEnv {
+    return {
+        ...process.env,
+        PATH: childPath(codexbarPath)
+    };
+}
+
+function childPath(codexbarPath: string): string {
+    const entries = [
+        process.env.PATH,
+        pathDirectory(codexbarPath),
+        ...CHILD_PATH_ENTRIES
+    ];
+
+    return uniquePathEntries(entries).join(delimiter);
+}
+
+function pathDirectory(path: string): string | undefined {
+    if (!path.includes('/')) {
+        return undefined;
+    }
+
+    return dirname(path);
+}
+
+function uniquePathEntries(
+    entries: Array<string | undefined>
+): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+
+    for (const entry of entries) {
+        for (const part of entry?.split(delimiter) ?? []) {
+            const trimmed = part.trim();
+            if (trimmed.length === 0 || seen.has(trimmed)) {
+                continue;
+            }
+
+            seen.add(trimmed);
+            result.push(trimmed);
+        }
+    }
+
+    return result;
 }
 
 export function positiveInteger(

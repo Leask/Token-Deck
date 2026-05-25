@@ -24,7 +24,7 @@ const CHILD_PATH_ENTRIES = [
     '/sbin'
 ];
 const HTTP_TIMEOUT_MS = 10_000;
-const CLI_TIMEOUT_MS = 20_000;
+const CLI_TIMEOUT_MS = 60_000;
 
 export type TokenDeckSettings = JsonObject & {
     provider?: string;
@@ -127,7 +127,6 @@ async function fetchFromCLI(
         'json',
         '--json-only'
     ];
-
     try {
         const { stdout } = await execFileAsync(codexbarPath, args, {
             timeout: CLI_TIMEOUT_MS,
@@ -139,9 +138,17 @@ async function fetchFromCLI(
         const execError = error as NodeJS.ErrnoException & {
             stdout?: string;
             stderr?: string;
+            killed?: boolean;
+            signal?: NodeJS.Signals;
         };
         if (execError.stdout?.trim()) {
             return parseJSONPayload(execError.stdout);
+        }
+
+        if (execError.killed && execError.signal === 'SIGTERM') {
+            throw new Error(
+                `CodexBar CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`
+            );
         }
 
         throw new Error(execError.stderr?.trim() || execError.message);

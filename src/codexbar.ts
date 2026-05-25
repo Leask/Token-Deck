@@ -222,7 +222,7 @@ function codexSourceArgs(provider: string): string[] {
         return [];
     }
 
-    return ['--source', 'cli'];
+    return ['--source', 'oauth'];
 }
 
 function normalizeMode(mode?: TokenDeckSettings['mode']): 'http' | 'cli' {

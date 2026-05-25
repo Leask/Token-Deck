@@ -23,10 +23,10 @@ CLI mode runs a short-lived command on each refresh:
 codexbar usage --provider <provider> --format json --json-only
 ```
 
-For the default Codex provider, Token Deck pins CodexBar to the CLI source:
+For the default Codex provider, Token Deck pins CodexBar to the OAuth source:
 
 ```bash
-codexbar usage --provider codex --source cli --format json --json-only
+codexbar usage --provider codex --source oauth --format json --json-only
 ```
 
 Other providers keep CodexBar's provider-specific default source selection.

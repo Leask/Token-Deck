@@ -19,7 +19,7 @@ By default, the plugin uses `CLI` mode and runs a short-lived CodexBar command
 at each refresh:
 
 ```bash
-codexbar usage --provider codex --source cli --format json --json-only
+codexbar usage --provider codex --source oauth --format json --json-only
 ```
 
 For non-Codex providers, Token Deck keeps CodexBar's provider-specific default

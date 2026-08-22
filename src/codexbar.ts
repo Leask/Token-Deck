@@ -5,6 +5,8 @@ import { promisify } from 'node:util';
 
 import type { JsonObject } from '@elgato/utils';
 
+import { fetchOpenCodeSnapshot } from './opencode';
+
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_PROVIDER = 'codex';
@@ -28,11 +30,12 @@ const CLI_TIMEOUT_MS = 60_000;
 
 export type TokenDeckSettings = JsonObject & {
     provider?: string;
-    mode?: 'http' | 'cli';
+    mode?: 'http' | 'cli' | 'opencode';
     endpoint?: string;
     port?: number | string;
     codexbarPath?: string;
     refreshIntervalSeconds?: number | string;
+    switchIntervalSeconds?: number | string;
 };
 
 export type RateWindow = {
@@ -51,6 +54,7 @@ export type TokenSnapshot = {
     accountLabel?: string;
     primary?: RateWindow;
     secondary?: RateWindow;
+    tertiary?: RateWindow;
 };
 
 type RawRateWindow = {
@@ -66,6 +70,7 @@ type RawUsage = {
     updatedAt?: string;
     primary?: RawRateWindow | null;
     secondary?: RawRateWindow | null;
+    tertiary?: RawRateWindow | null;
 };
 
 type RawProviderPayload = {
@@ -83,6 +88,10 @@ export async function fetchTokenSnapshot(
 ): Promise<TokenSnapshot> {
     const mode = normalizeMode(settings.mode);
     const provider = normalizeProvider(settings.provider);
+
+    if (mode === 'opencode') {
+        return fetchOpenCodeSnapshot(provider);
+    }
 
     if (mode === 'http') {
         return normalizePayload(await fetchFromHTTP(settings, provider));
@@ -179,7 +188,8 @@ function normalizePayload(payload: RawProviderPayload[]): TokenSnapshot {
         updatedAt: usage.updatedAt,
         accountLabel: usage.loginMethod ?? usage.accountEmail,
         primary: normalizeWindow(usage.primary),
-        secondary: normalizeWindow(usage.secondary)
+        secondary: normalizeWindow(usage.secondary),
+        tertiary: normalizeWindow(usage.tertiary)
     };
 }
 
@@ -232,8 +242,10 @@ function codexSourceArgs(provider: string): string[] {
     return ['--source', 'oauth'];
 }
 
-function normalizeMode(mode?: TokenDeckSettings['mode']): 'http' | 'cli' {
-    if (mode === 'http') {
+function normalizeMode(
+    mode?: TokenDeckSettings['mode']
+): 'http' | 'cli' | 'opencode' {
+    if (mode === 'http' || mode === 'opencode') {
         return mode;
     }
 

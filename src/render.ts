@@ -30,6 +30,7 @@ function renderTokenSVG(state: RenderState): string {
     const { snapshot } = state;
     const primary = snapshot.primary;
     const secondary = snapshot.secondary;
+    const tertiary = snapshot.tertiary;
     const badges = [];
 
     if (state.status === 'refreshing') {
@@ -38,8 +39,18 @@ function renderTokenSVG(state: RenderState): string {
         badges.push(errorBadge(116, 23));
     }
 
+    if (tertiary !== undefined) {
+        return baseSVG([
+            text(72, 22, providerTitle(snapshot.provider), 12, '#aab3c5', '700'),
+            compactLimitBlock(18, 30, windowLabel(primary), primary, 'short'),
+            compactLimitBlock(18, 63, windowLabel(secondary), secondary, 'long'),
+            compactLimitBlock(18, 96, windowLabel(tertiary), tertiary, 'long'),
+            ...badges
+        ]);
+    }
+
     return baseSVG([
-        text(72, 24, snapshot.provider.toUpperCase(), 14, '#aab3c5', '700'),
+        text(72, 24, providerTitle(snapshot.provider), 14, '#aab3c5', '700'),
         limitBlock(18, 38, windowLabel(primary), primary, 'short'),
         limitBlock(18, 82, windowLabel(secondary), secondary, 'long'),
         ...badges
@@ -113,6 +124,31 @@ function limitBlock(
         text(x + 70, y + 18, `${remaining}%`, 24, fill, '800'),
         progressBar(x + 10, y + 28, 88, 8, window, fill)
     ].join('');
+}
+
+function compactLimitBlock(
+    x: number,
+    y: number,
+    label: string,
+    window: RateWindow | undefined,
+    tone: 'short' | 'long'
+): string {
+    const remaining = Math.round(window?.remainingPercent ?? 0);
+    const fill = colorForRemaining(remaining, tone);
+
+    return [
+        text(x + 13, y + 10, label, 9, '#aab3c5', '700'),
+        text(x + 70, y + 14, `${remaining}%`, 18, fill, '800'),
+        progressBar(x + 10, y + 21, 88, 6, window, fill)
+    ].join('');
+}
+
+function providerTitle(provider: string): string {
+    if (provider.trim().toLowerCase() === 'opencode-go') {
+        return 'OPENCODE GO';
+    }
+
+    return provider.toUpperCase();
 }
 
 function updatingBadge(x: number, y: number): string {

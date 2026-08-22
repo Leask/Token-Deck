@@ -17,13 +17,25 @@ import { renderTokenImage } from '../render';
 
 const DEFAULT_REFRESH_SECONDS = 60;
 const MIN_REFRESH_SECONDS = 15;
+const DEFAULT_SWITCH_SECONDS = 10;
+const MIN_SWITCH_SECONDS = 5;
+
+const SWITCH_PROVIDERS = ['codex', 'opencode-go'] as const;
+type SwitchProvider = typeof SWITCH_PROVIDERS[number];
+type TokenKeyAction = KeyDownEvent<TokenDeckSettings>['action'];
 
 @action({ UUID: 'com.leask.token-deck.usage' })
 export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
     private readonly timers = new Map<string, NodeJS.Timeout>();
+    private readonly rotationTimers = new Map<string, NodeJS.Timeout>();
     private readonly inFlight = new Set<string>();
     private readonly pendingManualRefresh = new Set<string>();
     private readonly snapshots = new Map<string, TokenSnapshot>();
+    private readonly switchSnapshots = new Map<
+        string,
+        Map<SwitchProvider, TokenSnapshot>
+    >();
+    private readonly activeProviders = new Map<string, SwitchProvider>();
 
     override async onWillAppear(
         ev: WillAppearEvent<TokenDeckSettings>
@@ -32,15 +44,20 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
             return;
         }
 
+        this.initializeSwitchState(ev.action.id, ev.payload.settings);
         await this.refresh(ev.action, ev.payload.settings, true);
         this.schedule(ev.action.id, ev.payload.settings);
+        this.scheduleRotation(ev.action.id, ev.payload.settings);
     }
 
     override onWillDisappear(
         ev: WillDisappearEvent<TokenDeckSettings>
     ): void {
         this.clearTimer(ev.action.id);
+        this.clearRotationTimer(ev.action.id);
         this.snapshots.delete(ev.action.id);
+        this.switchSnapshots.delete(ev.action.id);
+        this.activeProviders.delete(ev.action.id);
     }
 
     override async onDidReceiveSettings(
@@ -50,14 +67,26 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
             return;
         }
 
+        this.initializeSwitchState(ev.action.id, ev.payload.settings);
         await this.refresh(ev.action, ev.payload.settings, true);
         this.schedule(ev.action.id, ev.payload.settings);
+        this.scheduleRotation(ev.action.id, ev.payload.settings);
     }
 
     override async onKeyDown(
         ev: KeyDownEvent<TokenDeckSettings>
     ): Promise<void> {
-        await this.refresh(ev.action, ev.payload.settings, true, true);
+        if (!this.isSwitchMode(ev.payload.settings)) {
+            await this.refresh(ev.action, ev.payload.settings, true, true);
+            return;
+        }
+
+        this.toggleSwitchProvider(ev.action.id);
+        const rendered = await this.renderActiveSwitchSnapshot(ev.action);
+        if (!rendered) {
+            await this.refresh(ev.action, ev.payload.settings, true, true);
+        }
+        this.scheduleRotation(ev.action.id, ev.payload.settings);
     }
 
     private schedule(actionId: string, settings: TokenDeckSettings): void {
@@ -88,6 +117,46 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
         this.timers.set(actionId, timer);
     }
 
+    private scheduleRotation(
+        actionId: string,
+        settings: TokenDeckSettings
+    ): void {
+        this.clearRotationTimer(actionId);
+        if (!this.isSwitchMode(settings)) {
+            return;
+        }
+
+        const switchSeconds = Math.max(
+            MIN_SWITCH_SECONDS,
+            positiveInteger(
+                settings.switchIntervalSeconds,
+                DEFAULT_SWITCH_SECONDS
+            )
+        );
+
+        const timer = setInterval(() => {
+            const action = this.actions.find((candidate) => {
+                return candidate.id === actionId && candidate.isKey();
+            });
+            if (!action?.isKey()) {
+                return;
+            }
+
+            /*
+             * Rotation is presentation-only. Do not call getSettings() here:
+             * Stream Deck can answer that request with DidReceiveSettings,
+             * which would trigger a real data refresh on every UI rotation.
+             * Settings changes already reschedule this timer through
+             * onDidReceiveSettings().
+             */
+            this.toggleSwitchProvider(actionId);
+            void this.renderActiveSwitchSnapshot(action)
+                .catch(() => action.showAlert());
+        }, switchSeconds * 1000);
+
+        this.rotationTimers.set(actionId, timer);
+    }
+
     private clearTimer(actionId: string): void {
         const timer = this.timers.get(actionId);
         if (timer !== undefined) {
@@ -96,8 +165,46 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
         }
     }
 
+    private clearRotationTimer(actionId: string): void {
+        const timer = this.rotationTimers.get(actionId);
+        if (timer !== undefined) {
+            clearInterval(timer);
+            this.rotationTimers.delete(actionId);
+        }
+    }
+
+    private initializeSwitchState(
+        actionId: string,
+        settings: TokenDeckSettings
+    ): void {
+        if (!this.isSwitchMode(settings)) {
+            this.activeProviders.delete(actionId);
+            this.switchSnapshots.delete(actionId);
+            return;
+        }
+
+        if (!this.activeProviders.has(actionId)) {
+            this.activeProviders.set(actionId, 'codex');
+        }
+    }
+
+    private isSwitchMode(settings: TokenDeckSettings): boolean {
+        return settings.provider?.trim().toLowerCase() === 'switch';
+    }
+
+    private toggleSwitchProvider(actionId: string): void {
+        const current = this.activeProviders.get(actionId) ?? 'codex';
+        const next: SwitchProvider = current === 'codex'
+            ? 'opencode-go'
+            : 'codex';
+        this.activeProviders.set(actionId, next);
+        streamDeck.logger.info(
+            `Token Deck provider switch: ${current} -> ${next}`
+        );
+    }
+
     private async refresh(
-        action: KeyDownEvent<TokenDeckSettings>['action'],
+        action: TokenKeyAction,
         settings: TokenDeckSettings,
         showLoading: boolean,
         queueIfBusy = false
@@ -118,7 +225,10 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
         }
 
         try {
-            const snapshot = await fetchTokenSnapshot(settings);
+            const snapshot = this.isSwitchMode(settings)
+                ? await this.refreshSwitchSnapshots(action.id, settings)
+                : await fetchTokenSnapshot(settings);
+
             this.snapshots.set(action.id, snapshot);
             streamDeck.logger.info(
                 `Token Deck refresh: ${titleForSnapshot(snapshot)} `
@@ -160,8 +270,84 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
         }
     }
 
+    private async refreshSwitchSnapshots(
+        actionId: string,
+        settings: TokenDeckSettings
+    ): Promise<TokenSnapshot> {
+        const cache = this.switchSnapshots.get(actionId)
+            ?? new Map<SwitchProvider, TokenSnapshot>();
+
+        const results = await Promise.allSettled(
+            SWITCH_PROVIDERS.map(async (provider) => {
+                const snapshot = await fetchTokenSnapshot({
+                    ...settings,
+                    provider,
+                    mode: 'opencode'
+                });
+                return { provider, snapshot };
+            })
+        );
+
+        const failures: string[] = [];
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                cache.set(result.value.provider, result.value.snapshot);
+                continue;
+            }
+
+            failures.push(
+                result.reason instanceof Error
+                    ? result.reason.message
+                    : String(result.reason)
+            );
+        }
+
+        this.switchSnapshots.set(actionId, cache);
+        if (cache.size === 0) {
+            throw new Error(failures.join('; ') || 'OpenCode usage unavailable');
+        }
+
+        let active = this.activeProviders.get(actionId) ?? 'codex';
+        if (!cache.has(active)) {
+            active = SWITCH_PROVIDERS.find((provider) => cache.has(provider))
+                ?? 'codex';
+            this.activeProviders.set(actionId, active);
+        }
+
+        const snapshot = cache.get(active);
+        if (snapshot === undefined) {
+            throw new Error('OpenCode usage unavailable');
+        }
+
+        if (failures.length > 0) {
+            streamDeck.logger.warn(
+                `Token Deck partial OpenCode refresh: ${failures.join('; ')}`
+            );
+        }
+
+        return snapshot;
+    }
+
+    private async renderActiveSwitchSnapshot(
+        action: TokenKeyAction
+    ): Promise<boolean> {
+        const active = this.activeProviders.get(action.id) ?? 'codex';
+        const snapshot = this.switchSnapshots.get(action.id)?.get(active);
+        if (snapshot === undefined) {
+            return false;
+        }
+
+        this.snapshots.set(action.id, snapshot);
+        await action.setImage(renderTokenImage({
+            status: 'ready',
+            snapshot
+        }));
+        await action.setTitle('');
+        return true;
+    }
+
     private async showRefreshIndicator(
-        action: KeyDownEvent<TokenDeckSettings>['action']
+        action: TokenKeyAction
     ): Promise<void> {
         const snapshot = this.snapshots.get(action.id);
         if (snapshot === undefined) {
@@ -178,7 +364,7 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
     }
 
     private async refreshLatestSettings(
-        action: KeyDownEvent<TokenDeckSettings>['action']
+        action: TokenKeyAction
     ): Promise<void> {
         try {
             const latestSettings = await action.getSettings<TokenDeckSettings>();

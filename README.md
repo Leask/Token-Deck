@@ -3,9 +3,10 @@
 ![Stream Deck Photo](https://github.com/user-attachments/assets/6f1d6ae6-cc68-42c5-900d-fdfeb78be87a)
 
 Token Deck is a Stream Deck plugin for showing AI provider quota, token usage,
-and Mac hardware status on Stream Deck keys. The token action is powered by
-[CodexBar](https://github.com/steipete/CodexBar), the hardware actions read
-local macOS status directly.
+and Mac hardware status on Stream Deck keys. Token usage can be read through
+[CodexBar](https://github.com/steipete/CodexBar) or directly from an existing
+[OpenCode](https://github.com/anomalyco/opencode) credential store. Hardware
+actions read local macOS status directly.
 
 ![Token Deck Screenshot](https://github.com/user-attachments/assets/2d8ac047-c8cd-4c4b-9316-11a5033baf5a)
 
@@ -13,10 +14,11 @@ local macOS status directly.
 
 - macOS with Elgato Stream Deck 7.1 or newer.
 - Node.js 24 or newer.
-- CodexBar installed and configured.
+- CodexBar installed and configured when using `CodexBar CLI` or `CodexBar HTTP`.
+- OpenCode authenticated when using the `OpenCode` data source.
 
-By default, the plugin uses `CLI` mode and runs a short-lived CodexBar command
-at each refresh:
+By default, the plugin uses `CodexBar CLI` mode and runs a short-lived CodexBar
+command at each refresh:
 
 ```bash
 codexbar usage --provider codex --source oauth --format json --json-only
@@ -26,30 +28,49 @@ For non-Codex providers, Token Deck keeps CodexBar's provider-specific default
 source selection. CLI subprocesses receive common Homebrew and system bin paths
 so Stream Deck can find provider CLIs without inheriting your login shell PATH.
 
-`HTTP` mode reads an explicitly running CodexBar JSON service:
+`CodexBar HTTP` mode reads an explicitly running CodexBar JSON service:
 
 ```bash
 codexbar serve --port 8080 --refresh-interval 60
 ```
 
-The plugin never switches data sources automatically. Pick `CLI` or `HTTP` in
-the action settings.
+`OpenCode` mode reads existing credentials from OpenCode's local auth store. It
+currently supports:
 
-Custom connection fields are optional. If `CLI Path` is empty, Token Deck checks
-the common Homebrew paths and then runs `codexbar` from `PATH`. If
-`HTTP Endpoint` is empty, Token Deck builds `http://127.0.0.1:<port>/usage` from
-the `HTTP Port` setting.
+- `Codex` through the existing OpenAI OAuth credential.
+- `OpenCode Go` through the existing OpenCode Go API credential.
+
+Token Deck does not copy credentials into Stream Deck settings. OpenAI OAuth
+refreshes are written back to the same OpenCode auth store while preserving the
+other provider credentials. `OPENCODE_AUTH_CONTENT` is also supported as a
+read-only credential source.
+
+OpenCode Go exposes rolling, weekly, and monthly quota windows. Token Deck can
+render all three windows on one key.
+
+The `Codex ↔ OpenCode Go` provider mode refreshes both OpenCode-backed snapshots
+on the normal refresh timer and rotates the displayed snapshot independently.
+The default rotation interval is 10 seconds. Rotation is in-memory only and does
+not trigger additional network requests. Pressing the key switches provider
+immediately and restarts the rotation timer.
+
+Custom CodexBar connection fields remain optional. If `CLI Path` is empty, Token
+Deck checks common Homebrew paths and then runs `codexbar` from `PATH`. If
+`HTTP Endpoint` is empty, Token Deck builds
+`http://127.0.0.1:<port>/usage` from the `HTTP Port` setting.
 
 ## Architecture
 
 - Stream Deck runtime: Node.js/TypeScript via `@elgato/streamdeck`.
-- Token usage source: explicit `CLI` or `HTTP`; there is no hidden fallback
-  between data source modes.
+- Token usage sources: explicit `CodexBar CLI`, `CodexBar HTTP`, or `OpenCode`.
+- OpenCode source: local credential reuse for Codex/OpenAI and OpenCode Go.
+- Multi-provider mode: separate in-memory snapshots with independent UI rotation.
 - Hardware sources: macOS system commands and Apple SMC readings, kept
-  independent from CodexBar.
+  independent from token providers.
 - Rendering: each action generates a compact SVG image and sends it to the key
   with `setImage`.
-- Refresh: every key refreshes on its timer and immediately when pressed.
+- Refresh: every key refreshes on its timer; multi-provider rotation does not
+  refresh provider data.
 
 ## Development
 
@@ -74,10 +95,12 @@ directory.
 
 - provider name
 - remaining percentage for the primary quota window
-- primary reset countdown
-- secondary quota mini bar
+- secondary quota window when available
+- tertiary quota window when available
 
-Pressing the key forces a refresh.
+For normal single-provider actions, pressing the key forces a refresh. In
+`Codex ↔ OpenCode Go` mode, pressing the key switches immediately to the other
+cached provider snapshot.
 
 Hardware status actions can be added as separate keys without changing the
 token key:

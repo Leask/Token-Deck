@@ -142,16 +142,15 @@ export class TokenUsageAction extends SingletonAction<TokenDeckSettings> {
                 return;
             }
 
-            void action.getSettings<TokenDeckSettings>()
-                .then(async (latestSettings) => {
-                    if (!this.isSwitchMode(latestSettings)) {
-                        this.clearRotationTimer(actionId);
-                        return;
-                    }
-
-                    this.toggleSwitchProvider(actionId);
-                    await this.renderActiveSwitchSnapshot(action);
-                })
+            /*
+             * Rotation is presentation-only. Do not call getSettings() here:
+             * Stream Deck can answer that request with DidReceiveSettings,
+             * which would trigger a real data refresh on every UI rotation.
+             * Settings changes already reschedule this timer through
+             * onDidReceiveSettings().
+             */
+            this.toggleSwitchProvider(actionId);
+            void this.renderActiveSwitchSnapshot(action)
                 .catch(() => action.showAlert());
         }, switchSeconds * 1000);
 

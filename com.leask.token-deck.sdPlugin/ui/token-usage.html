@@ -28,7 +28,9 @@
 <body>
     <sdpi-item label="Provider">
         <sdpi-select setting="provider" default="codex">
+            <option value="switch">Codex ↔ OpenCode Go</option>
             <option value="codex">Codex</option>
+            <option value="opencode-go">OpenCode Go</option>
             <option value="claude">Claude</option>
             <option value="gemini">Gemini</option>
             <option value="cursor">Cursor</option>
@@ -39,9 +41,23 @@
 
     <sdpi-item label="Data Source">
         <sdpi-select setting="mode" default="cli">
-            <option value="cli">CLI</option>
-            <option value="http">HTTP</option>
+            <option value="cli">CodexBar CLI</option>
+            <option value="http">CodexBar HTTP</option>
+            <option value="opencode">OpenCode</option>
         </sdpi-select>
+    </sdpi-item>
+
+    <sdpi-item label="Switch Sec">
+        <input
+            id="switchIntervalSeconds"
+            class="numeric-input"
+            data-setting="switchIntervalSeconds"
+            type="number"
+            min="5"
+            max="300"
+            step="1"
+            value="10"
+            inputmode="numeric">
     </sdpi-item>
 
     <sdpi-item label="HTTP Port">
@@ -88,7 +104,8 @@
         (() => {
             const defaults = {
                 port: '8080',
-                refreshIntervalSeconds: '60'
+                refreshIntervalSeconds: '60',
+                switchIntervalSeconds: '10'
             };
             const numericSettings = Object.keys(defaults);
             let currentSettings = {};
